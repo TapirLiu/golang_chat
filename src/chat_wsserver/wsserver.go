@@ -63,6 +63,10 @@ func httpHandler (w http.ResponseWriter, r *http.Request) {
    }
      
 	sendPageData (w, httpContentCache, "text/html; charset=utf-8")
+   
+   // debug
+   httpTemplate = nil
+   httpContentCache = nil
 }
 
 type ChatConn struct { // implement chat.ReadWriteCloser
@@ -72,7 +76,7 @@ type ChatConn struct { // implement chat.ReadWriteCloser
    OutputBuffer bytes.Buffer
 }
 
-func (cc *ChatConn) ReadBuffer (b []byte, from int) int {
+func (cc *ChatConn) ReadFromBuffer (b []byte, from int) int {
    to := len (b) - from
    if to > cc.InputBuffer.Len () {
       to = cc.InputBuffer.Len ()
@@ -88,12 +92,14 @@ func (cc *ChatConn) ReadBuffer (b []byte, from int) int {
 }
 
 func (cc *ChatConn) Read (b []byte) (int, error) {
+fmt.Printf ("aaa\n")
    var from = 0
-   from = cc.ReadBuffer (b, from)
+   from = cc.ReadFromBuffer (b, from)
    if from == len (b) {
       return from, nil
    }
    
+fmt.Printf ("bb from = %d\n", from)
    var messageType, p, err = cc.Conn.ReadMessage ()
    if err != nil || messageType != websocket.TextMessage { // only TextMessage is suppported now
       return from, err
@@ -104,12 +110,41 @@ func (cc *ChatConn) Read (b []byte) (int, error) {
       return from, err
    }
    
-   from = cc.ReadBuffer (b, from)
+   err = cc.InputBuffer.WriteByte ('\n')
+   if err != nil {
+      return from, err
+   }
+   
+   from = cc.ReadFromBuffer (b, from)
+   
+fmt.Printf ("cc = %d: %s\n", from, b[:from])
    
    return from, nil
 }
 
+func (cc *ChatConn) MergeOutputBuffer (newb []byte) []byte {
+   var old_n = cc.OutputBuffer.Len ()
+   if old_n == 0 {
+      return newb
+   }
+   
+   var new_n = len (newb)
+   var all_n = old_n + new_n
+   var all_b = make ([]byte, all_n)
+   cc.OutputBuffer.Read (all_b)
+   var to = old_n
+   var from = 0
+   for from < new_n {
+      all_b [to] = newb [from]
+   }
+   
+   return all_b
+}
+
 func (cc *ChatConn) Write (b []byte) (int, error) {
+   b = cc.MergeOutputBuffer (b)
+   
+fmt.Printf ("111\n")
    var n = len (b)
    var from = 0
    var to = 0
@@ -117,7 +152,8 @@ func (cc *ChatConn) Write (b []byte) (int, error) {
    for to < n {
       if b [to] == '\n' {
          if to - from > 0 {
-            err = cc.Conn.WriteMessage (websocket.TextMessage, b [from:to])
+fmt.Printf ("111 aaa\n")
+            err = cc.Conn.WriteMessage (websocket.TextMessage, b [from : to + 1])
             if err != nil {
                return from, err
             }
@@ -128,11 +164,14 @@ func (cc *ChatConn) Write (b []byte) (int, error) {
       
       to ++
    }
+fmt.Printf ("222\n")
    
    if from < n {
+fmt.Printf ("333\n")
       n, err = cc.OutputBuffer.Write (b [from:])
       return from + n, err
    } else {
+fmt.Printf ("444\n")
       return n, nil
    }
 }

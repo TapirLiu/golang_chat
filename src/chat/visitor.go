@@ -142,6 +142,8 @@ func (visitor *Visitor) read () {
             line = server.CreateMessage (visitor.Name, line)
          }
          
+         fmt.Printf ("Write to room")
+         
          visitor.CurrentRoom.Messages <- line
       }
    }

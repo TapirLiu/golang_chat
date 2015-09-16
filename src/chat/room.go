@@ -94,9 +94,12 @@ func (room *Room) run () {
             visitor.endChangingRoom ()
          //}
       case message = <- room.Messages:
+         fmt.Printf ("Room write message")
          for e := room.Visitors.Front(); e != nil; e = e.Next() {
+            fmt.Printf ("Room write message 111")
             visitor, ok = e.Value. (*Visitor)
             if ok { // must
+               fmt.Printf ("Room write message 222")
                visitor.OutputMessages <- message
             }
          }
