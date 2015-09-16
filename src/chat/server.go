@@ -1,4 +1,4 @@
-package main
+package chat
 
 import (
    "net"
@@ -12,12 +12,12 @@ import (
 )
 
 type Server struct {
-   Port     int
    Rooms    map[string]*Room
    Lobby    *Room
    Visitors map[string]*Visitor
    ToExit   chan int
    
+   PendingConnections chan net.Conn
    ChangeRoomRequests chan *Visitor
    
    RegexpBraces   *regexp.Regexp
@@ -40,35 +40,21 @@ func (server *Server) CreateRandomVisitorName () string {
    } 
 }
 
-func (server *Server) HandleAccept (listener net.Listener) {
-   for {
-      var conn, err = listener.Accept ()
-      if err != nil {
-         log.Printf ("Accept new connection error: %s\n", err.Error ())
-      } else {
-         var visitor = server.CreateNewVisitor (conn, server.CreateRandomVisitorName ())
-         if visitor != nil {
-            go visitor.Run ()
-         }
-      }
-   }
-}
-
-func (server *Server) HandleChangeRoomRequests () {
+func (server *Server) handleChangeRoomRequests () {
    for {
       select {
       case visitor := <- server.ChangeRoomRequests:
          if visitor.CurrentRoom != nil { // &&  visitor.RoomElement != nil
             visitor.CurrentRoom.VisitorLeaveRequests <- visitor
          } else if visitor.NextRoomID == VoidRoomID {
-            visitor.EndChangingRoom ()
+            visitor.endChangingRoom ()
             log.Printf ("Destroy visitor: %s", visitor.Name)
-            server.DestroyVisitor (visitor)
+            server.destroyVisitor (visitor)
          } else {
             var room = server.Rooms [strings.ToLower (visitor.NextRoomID)]
             if room == nil {
-               room = server.CreateNewRoom (visitor.NextRoomID)
-               go room.Run ()
+               room = server.createNewRoom (visitor.NextRoomID)
+               go room.run ()
             }
             
             room.VisitorEnterRequests <- visitor
@@ -78,31 +64,46 @@ func (server *Server) HandleChangeRoomRequests () {
    }
 }
 
-func (server *Server) Run (port int) {
-   
-   var address = fmt.Sprintf (":%d", port)
-   var listener, err = net.Listen ("tcp", address)
-   if err != nil {
-      log.Fatalf ("Listen error: %s\n", err.Error ())
+func (server *Server) acceptNewConnections () {
+   for {
+      select {
+      case conn := <- server.PendingConnections:
+         var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
+         if visitor != nil {
+            go visitor.run ()
+         }
+      }
    }
-   
-   log.Printf ("Listening ...\n")
+}
+
+func (server *Server) run () {
    
    rand.Seed (time.Now ().UTC ().UnixNano ())
    
-   server.Port = port
    server.Rooms = make (map[string]*Room)
-   server.Lobby = server.CreateNewRoom (LobbyRoomID);
+   server.Lobby = server.createNewRoom (LobbyRoomID);
    server.Visitors = make (map[string]*Visitor)
    server.ToExit = make (chan int, 1)
    
+   server.PendingConnections = make (chan net.Conn, MaxPendingConnections)
    server.ChangeRoomRequests = make (chan *Visitor, MaxBufferedChangeRoomRequests)
    
    server.RegexpBraces = regexp.MustCompile ("[{}]")
    
-   go server.Lobby.Run ()
-   go server.HandleAccept (listener)
-   go server.HandleChangeRoomRequests ()
+   go server.Lobby.run ()
+   go server.acceptNewConnections ()
+   go server.handleChangeRoomRequests ()
    
    <- server.ToExit
+}
+
+func (server *Server) OnNewConnection (conn net.Conn) {
+   server.PendingConnections <- conn
+}
+
+func CreateChatServer () *Server {
+   var server = new (Server)
+   go server.run ()
+   
+   return server
 }

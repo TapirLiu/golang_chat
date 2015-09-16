@@ -1,4 +1,4 @@
-package main
+package chat
 
 import (
    "net"
@@ -28,7 +28,7 @@ type Visitor struct {
    Closed         chan int
 }
 
-func (server *Server) CreateNewVisitor (c net.Conn, name string) *Visitor {
+func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
    var visitor = &Visitor {
       Server: server,
       
@@ -50,14 +50,14 @@ func (server *Server) CreateNewVisitor (c net.Conn, name string) *Visitor {
    
    server.Visitors [strings.ToLower (name)] = visitor
    
-   visitor.BeginChangingRoom (LobbyRoomID)
+   visitor.beginChangingRoom (LobbyRoomID)
    
    log.Printf ("New visitor: %s", visitor.Name)
    
    return visitor
 }
 
-func (server *Server) DestroyVisitor (visitor *Visitor) {
+func (server *Server) destroyVisitor (visitor *Visitor) {
    if visitor.CurrentRoom != nil {
       log.Printf ("EnterVisDestroyVisitoritor: visitor.CurrentRoom != nil");
    }
@@ -67,29 +67,29 @@ func (server *Server) DestroyVisitor (visitor *Visitor) {
    visitor.Connection.Close ()
 }
 
-func (visitor *Visitor) BeginChangingRoom (newRoomID string) {
+func (visitor *Visitor) beginChangingRoom (newRoomID string) {
    visitor.RoomChanged = make (chan int) // to block Visitor.Read before room is changed.
    visitor.NextRoomID = newRoomID
    visitor.Server.ChangeRoomRequests <- visitor
 }
 
-func (visitor *Visitor) EndChangingRoom () {
+func (visitor *Visitor) endChangingRoom () {
    visitor.NextRoomID = VoidRoomID
    close (visitor.RoomChanged)
 }
 
-func (visitor *Visitor) Run () {
-   go visitor.Read ()
-   go visitor.Write ()
+func (visitor *Visitor) run () {
+   go visitor.read ()
+   go visitor.write ()
    
    <- visitor.ToClose
    close (visitor.Closed)
    
    // let server close visitor
-   visitor.BeginChangingRoom (VoidRoomID)
+   visitor.beginChangingRoom (VoidRoomID)
 }
 
-func (visitor *Visitor) Read () {
+func (visitor *Visitor) read () {
    var server = visitor.Server
    
    for {
@@ -127,7 +127,7 @@ func (visitor *Visitor) Read () {
             } else { // change room, 
                line = server.NormalizeName (line)
                
-               visitor.BeginChangingRoom (line)
+               visitor.beginChangingRoom (line)
             }
             
             continue;
@@ -149,7 +149,7 @@ func (visitor *Visitor) Read () {
 EXIT:
 }
 
-func (visitor *Visitor) Write () {
+func (visitor *Visitor) write () {
    for {
       select {
       case <- visitor.Closed:

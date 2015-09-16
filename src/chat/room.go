@@ -1,4 +1,4 @@
-package main
+package chat
 
 import (
    "log"
@@ -22,7 +22,7 @@ type Room struct {
    //Closed   chan int // todo: when number visitors is 0, close room
 }
 
-func (server *Server) CreateNewRoom (id string) *Room {
+func (server *Server) createNewRoom (id string) *Room {
    var room = &Room {
       Server: server,
       
@@ -43,7 +43,7 @@ func (server *Server) CreateNewRoom (id string) *Room {
    return room
 }
 
-func (room *Room) EnterVisitor (visitor *Visitor) {
+func (room *Room) enterVisitor (visitor *Visitor) {
    if visitor.RoomElement != nil || visitor.CurrentRoom != nil {
       log.Printf ("EnterVisitor: visitor has already entered a room")
    }
@@ -52,7 +52,7 @@ func (room *Room) EnterVisitor (visitor *Visitor) {
    visitor.RoomElement = room.Visitors.PushBack (visitor)
 }
 
-func (room *Room) LeaveVisitor (visitor *Visitor) {
+func (room *Room) leaveVisitor (visitor *Visitor) {
    if visitor.RoomElement == nil || visitor.CurrentRoom == nil {
       log.Printf ("LeaveVisitor: visitor has not entered any room yet")
       return
@@ -71,7 +71,7 @@ func (room *Room) LeaveVisitor (visitor *Visitor) {
    visitor.CurrentRoom = nil
 }
 
-func (room *Room) Run () {
+func (room *Room) run () {
    var server = room.Server
    var visitor *Visitor
    var message string
@@ -81,7 +81,7 @@ func (room *Room) Run () {
       select {
       case visitor = <- room.VisitorLeaveRequests:
          //if (visitor.CurrentRoom == room) {
-            room.LeaveVisitor (visitor)
+            room.leaveVisitor (visitor)
          //}
          server.ChangeRoomRequests <- visitor
       case visitor = <- room.VisitorEnterRequests:
@@ -89,9 +89,9 @@ func (room *Room) Run () {
             if room.Visitors.Len () >= MaxRoomCapacity {
                visitor.OutputMessages <- server.CreateMessage (room.Name, "Sorry, I am full. :(")
             } else {
-               room.EnterVisitor (visitor)
+               room.enterVisitor (visitor)
             }
-            visitor.EndChangingRoom ()
+            visitor.endChangingRoom ()
          //}
       case message = <- room.Messages:
          for e := room.Visitors.Front(); e != nil; e = e.Next() {
