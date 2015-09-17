@@ -58,35 +58,37 @@ func (server *Server) run () {
    
    go server.Lobby.run ()
    
-   for {
-      select {
-      case conn := <- server.PendingConnections:
-         var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
-         if visitor != nil {
-            visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name: %s. You can input /name new_name to change your name.", visitor.Name))
-            go visitor.run ()
-         }
-      case visitor := <- server.ChangeNameRequests:
-         visitor.changeName ()
-      case visitor := <- server.ChangeRoomRequests:
-         if visitor.CurrentRoom != nil { // &&  visitor.RoomElement != nil
-            visitor.CurrentRoom.VisitorLeaveRequests <- visitor
-         } else if visitor.NextRoomID == VoidRoomID {
-            visitor.endChangingRoom ()
-            log.Printf ("Destroy visitor: %s", visitor.Name)
-            server.destroyVisitor (visitor)
-         } else {
-            var room = server.Rooms [strings.ToLower (visitor.NextRoomID)]
-            if room == nil {
-               room = server.createNewRoom (visitor.NextRoomID)
-               go room.run ()
+   go func (server *Server) {
+      for {
+         select {
+         case conn := <- server.PendingConnections:
+            var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
+            if visitor != nil {
+               visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name: %s. You can input /name new_name to change your name.", visitor.Name))
+               go visitor.run ()
             }
-            
-            room.VisitorEnterRequests <- visitor
+         case visitor := <- server.ChangeNameRequests:
+            visitor.changeName ()
+         case visitor := <- server.ChangeRoomRequests:
+            if visitor.CurrentRoom != nil { // &&  visitor.RoomElement != nil
+               visitor.CurrentRoom.VisitorLeaveRequests <- visitor
+            } else if visitor.NextRoomID == VoidRoomID {
+               visitor.endChangingRoom ()
+               log.Printf ("Destroy visitor: %s", visitor.Name)
+               server.destroyVisitor (visitor)
+            } else {
+               var room = server.Rooms [strings.ToLower (visitor.NextRoomID)]
+               if room == nil {
+                  room = server.createNewRoom (visitor.NextRoomID)
+                  go room.run ()
+               }
+               
+               room.VisitorEnterRequests <- visitor
+            }
+         //case room := <- server.RoomCloseRequests:
          }
-      //case room := <- server.RoomCloseRequests:
       }
-   }
+   } (server)
    
    <- server.ToExit
 }
