@@ -70,6 +70,7 @@ func (server *Server) acceptNewConnections () {
       case conn := <- server.PendingConnections:
          var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
          if visitor != nil {
+            visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name: %s. You can input /name new_name to change your name.", visitor.Name))
             go visitor.run ()
          }
       }

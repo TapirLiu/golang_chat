@@ -92,14 +92,12 @@ func (cc *ChatConn) ReadFromBuffer (b []byte, from int) int {
 }
 
 func (cc *ChatConn) Read (b []byte) (int, error) {
-fmt.Printf ("aaa\n")
    var from = 0
    from = cc.ReadFromBuffer (b, from)
    if from == len (b) {
       return from, nil
    }
    
-fmt.Printf ("bb from = %d\n", from)
    var messageType, p, err = cc.Conn.ReadMessage ()
    if err != nil || messageType != websocket.TextMessage { // only TextMessage is suppported now
       return from, err
@@ -116,8 +114,6 @@ fmt.Printf ("bb from = %d\n", from)
    }
    
    from = cc.ReadFromBuffer (b, from)
-   
-fmt.Printf ("cc = %d: %s\n", from, b[:from])
    
    return from, nil
 }
@@ -144,7 +140,6 @@ func (cc *ChatConn) MergeOutputBuffer (newb []byte) []byte {
 func (cc *ChatConn) Write (b []byte) (int, error) {
    b = cc.MergeOutputBuffer (b)
    
-fmt.Printf ("111\n")
    var n = len (b)
    var from = 0
    var to = 0
@@ -152,7 +147,6 @@ fmt.Printf ("111\n")
    for to < n {
       if b [to] == '\n' {
          if to - from > 0 {
-fmt.Printf ("111 aaa\n")
             err = cc.Conn.WriteMessage (websocket.TextMessage, b [from : to + 1])
             if err != nil {
                return from, err
@@ -164,14 +158,11 @@ fmt.Printf ("111 aaa\n")
       
       to ++
    }
-fmt.Printf ("222\n")
    
    if from < n {
-fmt.Printf ("333\n")
       n, err = cc.OutputBuffer.Write (b [from:])
       return from + n, err
    } else {
-fmt.Printf ("444\n")
       return n, nil
    }
 }
@@ -228,8 +219,9 @@ func websocketHandler (w http.ResponseWriter, r *http.Request) {
 
 func createWebsocketServer (port int) {
    
-   log.Printf ("Websocket listening ...\n")
+   log.Printf ("Websocket listening at :%d ...\n", port)
    
+   http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("public"))))
 	http.HandleFunc("/ws", websocketHandler)
    http.HandleFunc("/", httpHandler)
    
@@ -249,7 +241,7 @@ func createSocketServer (port int) {
       log.Fatalf ("General socket listen error: %s\n", err.Error ())
    }
    
-   log.Printf ("General socket listening ...\n")
+   log.Printf ("General socket listening at %s: ...\n", listener.Addr ())
    
    for {
       var conn, err = listener.Accept ()
@@ -264,6 +256,7 @@ func createSocketServer (port int) {
 var chatServer *chat.Server
 
 func main () {
+   
    chatServer = chat.CreateChatServer ()
    
    go createSocketServer (9981)

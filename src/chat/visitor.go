@@ -2,6 +2,7 @@ package chat
 
 import (
    "net"
+   _ "io"
    "fmt"
    "log"
    "strings"
@@ -24,7 +25,8 @@ type Visitor struct {
    NextRoomID     string
    RoomChanged    chan int
    
-   ToClose        chan int
+   ReadClosed     chan int
+   WriteClosed    chan int
    Closed         chan int
 }
 
@@ -33,7 +35,7 @@ func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
       Server: server,
       
       Connection: c,
-      Input: bufio.NewReader (c),
+      Input: bufio.NewReader (c), // todo:io.LimitedReader 
       Output: bufio.NewWriter (c),
       OutputMessages: make (chan string, MaxVisitorBufferedMessages),
       
@@ -44,7 +46,8 @@ func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
       NextRoomID: VoidRoomID,
       RoomChanged: make (chan int),
       
-      ToClose: make (chan int, 2), // 2 for read and write
+      ReadClosed: make (chan int),
+      WriteClosed: make (chan int),
       Closed: make (chan int),
    }
    
@@ -59,16 +62,27 @@ func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
 
 func (server *Server) destroyVisitor (visitor *Visitor) {
    if visitor.CurrentRoom != nil {
-      log.Printf ("EnterVisDestroyVisitoritor: visitor.CurrentRoom != nil");
+      log.Printf ("destroyVisitor: visitor.CurrentRoom != nil")
    }
     
    delete (server.Visitors, visitor.Name)
    
-   visitor.Connection.Close ()
+   visitor.CloseConnection ()
+}
+
+func (visitor *Visitor) CloseConnection () error {
+    //defer func() {
+    //    if err := recover(); err != nil {
+    //        log.Println ("CloseConnection paniced", err)
+    //    }
+    //}()
+    // above is to avoid panic on reclose a connection. It may be not essential.
+   
+   return visitor.Connection.Close ()
 }
 
 func (visitor *Visitor) beginChangingRoom (newRoomID string) {
-   visitor.RoomChanged = make (chan int) // to block Visitor.Read before room is changed.
+   visitor.RoomChanged = make (chan int) // to block Visitor. Read before room is changed.
    visitor.NextRoomID = newRoomID
    visitor.Server.ChangeRoomRequests <- visitor
 }
@@ -82,7 +96,8 @@ func (visitor *Visitor) run () {
    go visitor.read ()
    go visitor.write ()
    
-   <- visitor.ToClose
+   <- visitor.WriteClosed
+   <- visitor.ReadClosed
    close (visitor.Closed)
    
    // let server close visitor
@@ -93,36 +108,40 @@ func (visitor *Visitor) read () {
    var server = visitor.Server
    
    for {
-      <- visitor.RoomChanged // wait server change room for vistor, when server has done it, this channel will be closed.
-      
       select {
+      //case <- visitor.ReadClosed:
+      //   goto EXIT
+      case <- visitor.WriteClosed:
+         goto EXIT
       case <- visitor.Closed:
          goto EXIT
       default:
       }
       
-      var line, err = visitor.Input.ReadString ('\n')
+      <- visitor.RoomChanged // wait server change room for vistor, when server has done it, this channel will be closed.
+      
+      var line, err = visitor.Input.ReadString ('\n') // todo: use io.LimitedReader insstead 
       if err != nil {
-         visitor.ToClose <- 1
          goto EXIT
       }
       
-      if len (line) > MaxMessageLength {
-         line = line [:MaxMessageLength]
+      rn := []rune (line)
+      if len (rn) > MaxMessageLength {
+         rn = rn [:MaxMessageLength -1]
+         line = fmt.Sprintf ("%s\n", string(rn))
       }
       
       if strings.HasPrefix (line, "/") {
          if strings.HasPrefix (line, "/exit") {
-            visitor.ToClose <- 1
             goto EXIT
          } else if strings.HasPrefix (line, "/room") {
             line = strings.TrimPrefix (line, "/room")
             line = strings.TrimSpace (line)
             if len (line) == 0 { // show current room name
                if visitor.CurrentRoom == nil {
-                  visitor.OutputMessages <- server.CreateMessage ("Server", "{lobby}")
+                  visitor.OutputMessages <- server.CreateMessage ("Server", "you are in lobby now")
                } else {
-                  visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("{%d}", visitor.CurrentRoom.ID))
+                  visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your are in %s now}", visitor.CurrentRoom.Name))
                }
             } else { // change room, 
                line = server.NormalizeName (line)
@@ -131,7 +150,20 @@ func (visitor *Visitor) read () {
             }
             
             continue;
-         //} else if strings.HasPrefix (line, "/name") {
+         } else if strings.HasPrefix (line, "/name") {
+            line = strings.TrimPrefix (line, "/name")
+            line = strings.TrimSpace (line)
+            if len (line) != 0 {
+               rn := []rune (line)
+               if len (rn) > MaxVisitorNameLength {
+                  line = string (rn [:MaxVisitorNameLength])
+               }
+               line = server.NormalizeName (line)
+               
+               visitor.Name = line
+               
+               visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("you changed your name to %s", visitor.Name)) 
+            }
          }      
       }
       
@@ -142,25 +174,28 @@ func (visitor *Visitor) read () {
             line = server.CreateMessage (visitor.Name, line)
          }
          
-         fmt.Printf ("Write to room")
-         
          visitor.CurrentRoom.Messages <- line
       }
    }
    
 EXIT:
+   
+   close (visitor.ReadClosed)
 }
 
 func (visitor *Visitor) write () {
    for {
       select {
+      case <- visitor.ReadClosed:
+         goto EXIT
+      //case <- visitor.WriteClosed:
+      //   goto EXIT
       case <- visitor.Closed:
          goto EXIT
       case message := <- visitor.OutputMessages:
          num, err := visitor.Output.WriteString (message)
          _ = num
          if err != nil {
-            visitor.ToClose <- 1
             goto EXIT
          }
          
@@ -170,7 +205,6 @@ func (visitor *Visitor) write () {
                num, err = visitor.Output.WriteString (message)
                _ = num
                if err != nil {
-                  visitor.ToClose <- 1
                   goto EXIT
                }
             default:
@@ -181,11 +215,14 @@ func (visitor *Visitor) write () {
 FLUSH:
             
          if visitor.Output.Flush () != nil {
-            visitor.ToClose <- 1
             goto EXIT
          }
       }
    }
    
 EXIT:
+   
+   visitor.CloseConnection () // to avoud read blocking
+   
+   close (visitor.WriteClosed)
 }

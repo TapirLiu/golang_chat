@@ -27,13 +27,18 @@ func (server *Server) createNewRoom (id string) *Room {
       Server: server,
       
       ID: id,
-      Name: fmt.Sprintf ("Room#%s", id),
       
       Visitors: list.New (),
       Messages: make (chan string, MaxRoomBufferedMessages),
       
       VisitorLeaveRequests: make (chan *Visitor, MaxRoomCapacity),
       VisitorEnterRequests: make (chan *Visitor, MaxRoomCapacity),
+   }
+   
+   if id == LobbyRoomID {
+      room.Name = id
+   } else {
+      room.Name = fmt.Sprintf ("Room#%s", id)
    }
    
    server.Rooms [strings.ToLower (id)] = room
@@ -82,6 +87,8 @@ func (room *Room) run () {
       case visitor = <- room.VisitorLeaveRequests:
          //if (visitor.CurrentRoom == room) {
             room.leaveVisitor (visitor)
+            visitor.OutputMessages <- server.CreateMessage (room.Name, "<= you leaved this room.")
+            //room.Messages <- server.CreateMessage (room.Name, fmt.Sprintf ("<= visitor#%s leaved this room.", visitor.Name))
          //}
          server.ChangeRoomRequests <- visitor
       case visitor = <- room.VisitorEnterRequests:
@@ -90,16 +97,15 @@ func (room *Room) run () {
                visitor.OutputMessages <- server.CreateMessage (room.Name, "Sorry, I am full. :(")
             } else {
                room.enterVisitor (visitor)
+               visitor.OutputMessages <- server.CreateMessage (room.Name, "<= you entered this room.")
+               //room.Messages <- server.CreateMessage (room.Name, fmt.Sprintf ("<= visitor#%s entered this room.", visitor.Name))
             }
             visitor.endChangingRoom ()
          //}
       case message = <- room.Messages:
-         fmt.Printf ("Room write message")
          for e := room.Visitors.Front(); e != nil; e = e.Next() {
-            fmt.Printf ("Room write message 111")
             visitor, ok = e.Value. (*Visitor)
             if ok { // must
-               fmt.Printf ("Room write message 222")
                visitor.OutputMessages <- message
             }
          }
