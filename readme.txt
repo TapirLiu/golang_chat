@@ -4,7 +4,7 @@ To build:
 
    go get github.com/gorilla/websocket
 
-   git install chat_wsserver
+   go install chat_wsserver
 
 To run:
 
