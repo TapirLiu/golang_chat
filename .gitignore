@@ -1,5 +1,6 @@
 **/-*
 \#*
 local.properties.*
+src/github.com/*
 pkg/
 bin/
