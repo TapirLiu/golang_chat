@@ -105,7 +105,7 @@ func (room *Room) run () {
       case message = <- room.Messages:
          for e := room.Visitors.Front(); e != nil; e = e.Next() {
             visitor, ok = e.Value. (*Visitor)
-            if ok { // must
+            if ok {
                visitor.OutputMessages <- message
             }
          }

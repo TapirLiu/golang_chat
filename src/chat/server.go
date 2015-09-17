@@ -41,9 +41,31 @@ func (server *Server) CreateRandomVisitorName () string {
    } 
 }
 
-func (server *Server) handleChangeRoomRequests () {
+func (server *Server) run () {
+   
+   rand.Seed (time.Now ().UTC ().UnixNano ())
+   
+   server.Rooms = make (map[string]*Room)
+   server.Lobby = server.createNewRoom (LobbyRoomID);
+   server.Visitors = make (map[string]*Visitor)
+   server.ToExit = make (chan int, 1)
+   
+   server.PendingConnections = make (chan net.Conn, MaxPendingConnections)
+   server.ChangeRoomRequests = make (chan *Visitor, MaxBufferedChangeRoomRequests)
+   server.ChangeNameRequests = make (chan *Visitor, MaxBufferedChangeNameRequests)
+   
+   server.RegexpBraces = regexp.MustCompile ("[{}]")
+   
+   go server.Lobby.run ()
+   
    for {
       select {
+      case conn := <- server.PendingConnections:
+         var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
+         if visitor != nil {
+            visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name: %s. You can input /name new_name to change your name.", visitor.Name))
+            go visitor.run ()
+         }
       case visitor := <- server.ChangeNameRequests:
          visitor.changeName ()
       case visitor := <- server.ChangeRoomRequests:
@@ -65,39 +87,6 @@ func (server *Server) handleChangeRoomRequests () {
       //case room := <- server.RoomCloseRequests:
       }
    }
-}
-
-func (server *Server) acceptNewConnections () {
-   for {
-      select {
-      case conn := <- server.PendingConnections:
-         var visitor = server.createNewVisitor (conn, server.CreateRandomVisitorName ())
-         if visitor != nil {
-            visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name: %s. You can input /name new_name to change your name.", visitor.Name))
-            go visitor.run ()
-         }
-      }
-   }
-}
-
-func (server *Server) run () {
-   
-   rand.Seed (time.Now ().UTC ().UnixNano ())
-   
-   server.Rooms = make (map[string]*Room)
-   server.Lobby = server.createNewRoom (LobbyRoomID);
-   server.Visitors = make (map[string]*Visitor)
-   server.ToExit = make (chan int, 1)
-   
-   server.PendingConnections = make (chan net.Conn, MaxPendingConnections)
-   server.ChangeRoomRequests = make (chan *Visitor, MaxBufferedChangeRoomRequests)
-   server.ChangeNameRequests = make (chan *Visitor, MaxBufferedChangeNameRequests)
-   
-   server.RegexpBraces = regexp.MustCompile ("[{}]")
-   
-   go server.Lobby.run ()
-   go server.acceptNewConnections ()
-   go server.handleChangeRoomRequests ()
    
    <- server.ToExit
 }
