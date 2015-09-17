@@ -19,6 +19,7 @@ type Visitor struct {
    OutputMessages chan string
    
    Name           string
+   NextName       string
    
    RoomElement    *list.Element // in CurrentRoom.Visitors
    CurrentRoom    *Room
@@ -40,6 +41,7 @@ func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
       OutputMessages: make (chan string, MaxVisitorBufferedMessages),
       
       Name: name,
+      NextName: "",
       
       RoomElement: nil,
       CurrentRoom: nil,
@@ -60,17 +62,48 @@ func (server *Server) createNewVisitor (c net.Conn, name string) *Visitor {
    return visitor
 }
 
+func (visitor *Visitor) changeName () {
+   var server = visitor.Server
+   
+   var newName = visitor.NextName
+   
+   rn := []rune (newName)
+   if len (rn) < MinVisitorNameLength {
+      return
+   }
+   
+   if len (rn) > MaxVisitorNameLength {
+      newName = string (rn [:MaxVisitorNameLength])
+   }
+   newName = server.NormalizeName (newName)
+   if len (newName) < MinVisitorNameLength || len (newName) > MaxVisitorNameLength {
+      return
+   }
+   
+   fmt.Printf ("len = %d, min = %d", len (newName), MinVisitorNameLength)
+   
+   if server.Visitors [strings.ToLower (newName)] != nil {
+      return
+   }
+   
+   delete (server.Visitors, strings.ToLower (visitor.Name))
+   visitor.Name = newName
+   server.Visitors [strings.ToLower (visitor.Name)] = visitor
+   
+   visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("you changed your name to %s", visitor.Name))
+}
+
 func (server *Server) destroyVisitor (visitor *Visitor) {
    if visitor.CurrentRoom != nil {
       log.Printf ("destroyVisitor: visitor.CurrentRoom != nil")
    }
-    
-   delete (server.Visitors, visitor.Name)
    
-   visitor.CloseConnection ()
+   delete (server.Visitors, strings.ToLower (visitor.Name))
+   
+   visitor.closeConnection ()
 }
 
-func (visitor *Visitor) CloseConnection () error {
+func (visitor *Visitor) closeConnection () error {
     //defer func() {
     //    if err := recover(); err != nil {
     //        log.Println ("CloseConnection paniced", err)
@@ -153,17 +186,15 @@ func (visitor *Visitor) read () {
          } else if strings.HasPrefix (line, "/name") {
             line = strings.TrimPrefix (line, "/name")
             line = strings.TrimSpace (line)
-            if len (line) != 0 {
-               rn := []rune (line)
-               if len (rn) > MaxVisitorNameLength {
-                  line = string (rn [:MaxVisitorNameLength])
-               }
-               line = server.NormalizeName (line)
-               
-               visitor.Name = line
-               
-               visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("you changed your name to %s", visitor.Name)) 
+            
+            if len (line) == 0 {
+               visitor.OutputMessages <- server.CreateMessage ("Server", fmt.Sprintf ("your name is %s}", visitor.Name))
+            } else if len (line) >= MinVisitorNameLength && len (line) <= MaxVisitorNameLength {
+               visitor.NextName = line
+               server.ChangeNameRequests <- visitor
             }
+            
+            continue;
          }      
       }
       
@@ -222,7 +253,7 @@ FLUSH:
    
 EXIT:
    
-   visitor.CloseConnection () // to avoud read blocking
+   visitor.closeConnection () // to avoud read blocking
    
    close (visitor.WriteClosed)
 }

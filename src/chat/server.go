@@ -19,6 +19,7 @@ type Server struct {
    
    PendingConnections chan net.Conn
    ChangeRoomRequests chan *Visitor
+   ChangeNameRequests chan *Visitor
    
    RegexpBraces   *regexp.Regexp
 }
@@ -43,6 +44,8 @@ func (server *Server) CreateRandomVisitorName () string {
 func (server *Server) handleChangeRoomRequests () {
    for {
       select {
+      case visitor := <- server.ChangeNameRequests:
+         visitor.changeName ()
       case visitor := <- server.ChangeRoomRequests:
          if visitor.CurrentRoom != nil { // &&  visitor.RoomElement != nil
             visitor.CurrentRoom.VisitorLeaveRequests <- visitor
@@ -88,6 +91,7 @@ func (server *Server) run () {
    
    server.PendingConnections = make (chan net.Conn, MaxPendingConnections)
    server.ChangeRoomRequests = make (chan *Visitor, MaxBufferedChangeRoomRequests)
+   server.ChangeNameRequests = make (chan *Visitor, MaxBufferedChangeNameRequests)
    
    server.RegexpBraces = regexp.MustCompile ("[{}]")
    
