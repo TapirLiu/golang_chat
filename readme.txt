@@ -1,3 +1,5 @@
+Demo: http://www.tapirgames.com/blog/golang-chat
+
 To build:
 
    export GOPATH=`pwd`
