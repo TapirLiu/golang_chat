@@ -14,6 +14,10 @@ import (
 	"chat"
 )
 
+const (
+  MaxBufferOutputBytes = 1024
+)
+
 func getTemplateFilePath(tn string) string {
 	return "private/template/" + tn
 }
@@ -41,6 +45,12 @@ var httpTemplate *template.Template
 var httpContentCache []byte
 
 func httpHandler(w http.ResponseWriter, r *http.Request) {
+  
+  //>> for debug
+  var httpTemplate *template.Template = nil
+  var httpContentCache []byte = nil
+  //<<
+  
 	var err error
 
 	if httpTemplate == nil {
@@ -63,10 +73,6 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendPageData(w, httpContentCache, "text/html; charset=utf-8")
-
-	// debug
-	httpTemplate = nil
-	httpContentCache = nil
 }
 
 type ChatConn struct { // implement chat.ReadWriteCloser
@@ -90,6 +96,30 @@ func (cc *ChatConn) ReadFromBuffer(b []byte, from int) int {
 
 	return from
 }
+
+func (cc *ChatConn) MergeOutputBuffer(newb []byte) []byte {
+	var old_n = cc.OutputBuffer.Len()
+	if old_n == 0 {
+		return newb
+	}
+
+	var new_n = len(newb)
+	var all_n = old_n + new_n
+	var all_b = make([]byte, all_n)
+	cc.OutputBuffer.Read(all_b)
+	var to = old_n
+	var from = 0
+	for from < new_n {
+		all_b[to] = newb[from]
+    from++
+    to++
+	}
+
+	return all_b
+}
+
+//====================================================================
+//>>>>>>>>>>>>>>>> implement net.Conn interface
 
 func (cc *ChatConn) Read(b []byte) (int, error) {
 	var from = 0
@@ -118,27 +148,8 @@ func (cc *ChatConn) Read(b []byte) (int, error) {
 	return from, nil
 }
 
-func (cc *ChatConn) MergeOutputBuffer(newb []byte) []byte {
-	var old_n = cc.OutputBuffer.Len()
-	if old_n == 0 {
-		return newb
-	}
-
-	var new_n = len(newb)
-	var all_n = old_n + new_n
-	var all_b = make([]byte, all_n)
-	cc.OutputBuffer.Read(all_b)
-	var to = old_n
-	var from = 0
-	for from < new_n {
-		all_b[to] = newb[from]
-	}
-
-	return all_b
-}
-
-func (cc *ChatConn) Write(b []byte) (int, error) {
-	b = cc.MergeOutputBuffer(b)
+func (cc *ChatConn) Write(newb []byte) (int, error) {
+  b := cc.MergeOutputBuffer(newb)
 
 	var n = len(b)
 	var from = 0
@@ -158,13 +169,12 @@ func (cc *ChatConn) Write(b []byte) (int, error) {
 
 		to++
 	}
-
+  
 	if from < n {
-		n, err = cc.OutputBuffer.Write(b[from:])
-		return from + n, err
-	} else {
-		return n, nil
-	}
+		cc.OutputBuffer.Write(b[from:])
+  }
+  
+  return len (newb), nil
 }
 
 func (cc *ChatConn) Close() error {
@@ -195,6 +205,10 @@ func (cc *ChatConn) SetReadDeadline(t time.Time) error {
 func (cc *ChatConn) SetWriteDeadline(t time.Time) error {
 	return cc.Conn.SetWriteDeadline(t)
 }
+
+//<<<<<<<<<<<<<<<<<<<< implement net.Conn interface
+//====================================================================
+
 
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  512,
