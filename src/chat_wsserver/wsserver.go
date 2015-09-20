@@ -2,16 +2,16 @@ package main
 
 import (
 	"bytes"
-  "fmt"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"time"
-  
-  //"io"
+
+	//"io"
 	//"strings"
-  //"bufio"
+	//"bufio"
 
 	"github.com/gorilla/websocket"
 
@@ -277,7 +277,7 @@ func createSocketServer(port int) {
 var chatServer *chat.Server
 
 func main() {
- 
+
 	chatServer = chat.CreateChatServer()
 
 	go createSocketServer(9981)

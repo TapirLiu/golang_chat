@@ -14,7 +14,7 @@ type Visitor struct {
 	Server *Server
 
 	Connection     net.Conn
-  LimitInput     *io.LimitedReader
+	LimitInput     *io.LimitedReader
 	Input          *bufio.Reader
 	Output         *bufio.Writer
 	OutputMessages chan string
@@ -51,10 +51,10 @@ func (server *Server) createNewVisitor(c net.Conn, name string) *Visitor {
 		WriteClosed: make(chan int),
 		Closed:      make(chan int),
 	}
-  
-  visitor.LimitInput = &io.LimitedReader {c, 0}
+
+	visitor.LimitInput = &io.LimitedReader{c, 0}
 	visitor.Input = bufio.NewReader(visitor.LimitInput)
-  visitor.Output = bufio.NewWriter (c)
+	visitor.Output = bufio.NewWriter(c)
 
 	server.Visitors[strings.ToLower(name)] = visitor
 
@@ -142,11 +142,11 @@ func (visitor *Visitor) run() {
 
 func (visitor *Visitor) read() {
 	var server = visitor.Server
-  
-  var MaxNumBytesPerMessage int64 = (MaxMessageLength << 2) + 1;
-  visitor.LimitInput.N = MaxNumBytesPerMessage
-  var inReadingLongMessage bool = false
-  
+
+	var MaxNumBytesPerMessage int64 = (MaxMessageLength << 2) + 1
+	visitor.LimitInput.N = MaxNumBytesPerMessage
+	var inReadingLongMessage bool = false
+
 	for {
 		select {
 		//case <- visitor.ReadClosed:
@@ -158,28 +158,28 @@ func (visitor *Visitor) read() {
 		default:
 		}
 
-		<- visitor.RoomChanged // wait server change room for vistor, when server has done it, this channel will be closed.
+		<-visitor.RoomChanged // wait server change room for vistor, when server has done it, this channel will be closed.
 
 		var line, err = visitor.Input.ReadString('\n') // todo: use io.LimitedReader insstead
 		if err != nil {
-      if err != io.EOF || line == "" {
-        goto EXIT
-      }
+			if err != io.EOF || line == "" {
+				goto EXIT
+			}
 		}
-    
-    visitor.LimitInput.N = int64 (len (line)) + visitor.LimitInput.N
+
+		visitor.LimitInput.N = int64(len(line)) + visitor.LimitInput.N
 
 		rn := []rune(line)
-		if len(rn) > MaxMessageLength || len(rn) == MaxMessageLength && line [len(line) - 1] != '\n' {
-      if ! inReadingLongMessage {
-        visitor.OutputMessages <- server.CreateMessage("Server", "your message is too long!")
-      }
-      inReadingLongMessage = line [len(line) - 1] != '\n'
-      continue
+		if len(rn) > MaxMessageLength || len(rn) == MaxMessageLength && line[len(line)-1] != '\n' {
+			if !inReadingLongMessage {
+				visitor.OutputMessages <- server.CreateMessage("Server", "your message is too long!")
+			}
+			inReadingLongMessage = line[len(line)-1] != '\n'
+			continue
 		} else if inReadingLongMessage {
-      inReadingLongMessage = false
-      continue
-    }
+			inReadingLongMessage = false
+			continue
+		}
 
 		if strings.HasPrefix(line, "/") {
 			if strings.HasPrefix(line, "/exit") {
