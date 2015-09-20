@@ -9,7 +9,7 @@ const (
 	MaxPendingConnections         = 128
 	MaxBufferedChangeRoomRequests = 128
 	MaxBufferedChangeNameRequests = 64
-	MaxMessageLength              = 256
+	MaxMessageLength              = 1024
 	LobbyRoomID                   = "Lobby"
 	VoidRoomID                    = ""
 )

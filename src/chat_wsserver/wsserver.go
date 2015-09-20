@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+  "fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"time"
+  
+  //"io"
+	//"strings"
+  //"bufio"
 
 	"github.com/gorilla/websocket"
 
@@ -15,7 +19,7 @@ import (
 )
 
 const (
-  MaxBufferOutputBytes = 1024
+	MaxBufferOutputBytes = 1024
 )
 
 func getTemplateFilePath(tn string) string {
@@ -45,12 +49,12 @@ var httpTemplate *template.Template
 var httpContentCache []byte
 
 func httpHandler(w http.ResponseWriter, r *http.Request) {
-  
-  //>> for debug
-  var httpTemplate *template.Template = nil
-  var httpContentCache []byte = nil
-  //<<
-  
+
+	//>> for debug
+	var httpTemplate *template.Template = nil
+	var httpContentCache []byte = nil
+	//<<
+
 	var err error
 
 	if httpTemplate == nil {
@@ -107,13 +111,14 @@ func (cc *ChatConn) MergeOutputBuffer(newb []byte) []byte {
 	var all_n = old_n + new_n
 	var all_b = make([]byte, all_n)
 	cc.OutputBuffer.Read(all_b)
-	var to = old_n
-	var from = 0
-	for from < new_n {
-		all_b[to] = newb[from]
-    from++
-    to++
-	}
+	//var to = old_n
+	//var from = 0
+	//for from < new_n {
+	//	all_b[to] = newb[from]
+	//  from++
+	//  to++
+	//}
+	copy(all_b[old_n:], newb)
 
 	return all_b
 }
@@ -149,7 +154,7 @@ func (cc *ChatConn) Read(b []byte) (int, error) {
 }
 
 func (cc *ChatConn) Write(newb []byte) (int, error) {
-  b := cc.MergeOutputBuffer(newb)
+	b := cc.MergeOutputBuffer(newb)
 
 	var n = len(b)
 	var from = 0
@@ -160,7 +165,7 @@ func (cc *ChatConn) Write(newb []byte) (int, error) {
 			if to-from > 0 {
 				err = cc.Conn.WriteMessage(websocket.TextMessage, b[from:to+1])
 				if err != nil {
-					return from, err
+					break
 				}
 			}
 
@@ -169,12 +174,15 @@ func (cc *ChatConn) Write(newb []byte) (int, error) {
 
 		to++
 	}
-  
+
 	if from < n {
 		cc.OutputBuffer.Write(b[from:])
-  }
-  
-  return len (newb), nil
+	}
+
+	//if (cc.OutputBuffer.Len() > MaxBufferOutputBytes)
+	//  err = error.New ("...")
+
+	return len(newb), nil
 }
 
 func (cc *ChatConn) Close() error {
@@ -208,7 +216,6 @@ func (cc *ChatConn) SetWriteDeadline(t time.Time) error {
 
 //<<<<<<<<<<<<<<<<<<<< implement net.Conn interface
 //====================================================================
-
 
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  512,
@@ -270,7 +277,7 @@ func createSocketServer(port int) {
 var chatServer *chat.Server
 
 func main() {
-
+ 
 	chatServer = chat.CreateChatServer()
 
 	go createSocketServer(9981)
