@@ -217,12 +217,10 @@ func (visitor *Visitor) read() {
 
 		if visitor.CurrentRoom != nil {
 			if visitor.CurrentRoom == server.Lobby {
-				line = server.CreateMessage("Server", "you are current in lobby, please input /room room_name to enter a room")
+				visitor.OutputMessages <- server.CreateMessage("Server", "you are current in lobby, please input /room room_name to enter a room")
 			} else {
-				line = server.CreateMessage(visitor.Name, line)
+				visitor.CurrentRoom.Messages <- server.CreateMessage(visitor.Name, line)
 			}
-
-			visitor.CurrentRoom.Messages <- line
 		}
 	}
 
