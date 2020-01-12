@@ -1,4 +1,5 @@
-Demo: http://www.tapirgames.com/blog/golang-chat
+(This is a project created when I just started learning Go.
+There might be some race bugs in it.)
 
 To build:
 
